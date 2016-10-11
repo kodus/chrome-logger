@@ -15,11 +15,9 @@ use ReflectionProperty;
 use Throwable;
 
 /**
- * PSR-3 and PSR-7 compatible alternative to the original ChromeLogger by Craig Campbell.
+ * PSR-3 and PSR-7 compliant alternative to the original ChromeLogger by Craig Campbell.
  *
- * @link https://github.com/ccampbell/chromephp
  * @link https://craig.is/writing/chrome-logger
- * @link http://www.apache.org/licenses/LICENSE-2.0
  */
 class ChromeLogger extends AbstractLogger implements LoggerInterface
 {

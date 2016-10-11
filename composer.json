@@ -1,7 +1,7 @@
 {
     "name": "kodus/chrome-logger",
     "type": "library",
-    "description": "Alternative to the original ChromeLogger for PHP, with support for PSR-7",
+    "description": "PSR-3 and PSR-7 compliant alternative to the original ChromeLogger for PHP",
     "license": "MIT",
     "authors": [
         {
