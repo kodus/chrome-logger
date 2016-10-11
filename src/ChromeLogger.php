@@ -1,434 +1,314 @@
 <?php
 
+namespace Kodus\Logging;
+
+use DateTimeInterface;
+use Error;
+use Exception;
+use JsonSerializable;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Log\AbstractLogger;
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
+use ReflectionClass;
+use ReflectionProperty;
+use Throwable;
+
 /**
- *
- *
- * Based on ChomeLogger by Craig Campbell
+ * PSR-3 and PSR-7 compatible alternative to the original ChromeLogger by Craig Campbell.
  *
  * @link https://github.com/ccampbell/chromephp
  * @link https://craig.is/writing/chrome-logger
  * @link http://www.apache.org/licenses/LICENSE-2.0
  */
-class ChromeLogger
+class ChromeLogger extends AbstractLogger implements LoggerInterface
 {
-    /**
-     * @var string
-     */
     const VERSION = '4.1.0';
 
-    /**
-     * @var string
-     */
+    const COLUMN_LOG       = "log";
+    const COLUMN_BACKTRACE = "backtrace";
+    const COLUMN_TYPE      = "type";
+
+    const CLASS_NAME  = "___class_name";
     const HEADER_NAME = 'X-ChromeLogger-Data';
 
-    /**
-     * @var string
-     */
-    const BACKTRACE_LEVEL = 'backtrace_level';
-
-    /**
-     * @var string
-     */
-    const LOG = 'log';
-
-    /**
-     * @var string
-     */
-    const WARN = 'warn';
-
-    /**
-     * @var string
-     */
+    const LOG   = 'log';
+    const WARN  = 'warn';
     const ERROR = 'error';
+    const INFO  = 'info';
 
-    /**
-     * @var string
-     */
-    const GROUP = 'group';
-
-    /**
-     * @var string
-     */
-    const INFO = 'info';
-
-    /**
-     * @var string
-     */
-    const GROUP_END = 'groupEnd';
-
-    /**
-     * @var string
-     */
+    const GROUP           = 'group';
+    const GROUP_END       = 'groupEnd';
     const GROUP_COLLAPSED = 'groupCollapsed';
 
-    /**
-     * @var string
-     */
     const TABLE = 'table';
 
-    /**
-     * @var string
-     */
-    protected $_php_version;
+    const DATETIME_FORMAT = "Y-m-d\\TH:i:s\\Z"; // ISO-8601 UTC date/time format
 
     /**
-     * @var int
+     * @var int header size limit (in bytes, defaults to 240KB)
      */
-    protected $_timestamp;
+    private $limit = 245760;
 
     /**
-     * @var array
+     * @var LogEntry[]
      */
-    protected $_json = array(
-        'version' => self::VERSION,
-        'columns' => array('log', 'backtrace', 'type'),
-        'rows' => array()
-    );
+    private $entries = [];
 
     /**
-     * @var array
-     */
-    protected $_backtraces = array();
-
-    /**
-     * @var bool
-     */
-    protected $_error_triggered = false;
-
-    /**
-     * @var array
-     */
-    protected $_settings = array(
-        self::BACKTRACE_LEVEL => 1
-    );
-
-    /**
-     * @var ChromePhp
-     */
-    protected static $_instance;
-
-    /**
-     * Prevent recursion when working with objects referring to each other
+     * Logs with an arbitrary level.
      *
-     * @var array
-     */
-    protected $_processed = array();
-
-    /**
-     * constructor
-     */
-    private function __construct()
-    {
-        $this->_php_version = phpversion();
-        $this->_timestamp = $this->_php_version >= 5.1 ? $_SERVER['REQUEST_TIME'] : time();
-        $this->_json['request_uri'] = $_SERVER['REQUEST_URI'];
-    }
-
-    /**
-     * gets instance of this class
+     * @param mixed  $level
+     * @param string $message
+     * @param array  $context
      *
-     * @return ChromePhp
-     */
-    public static function getInstance()
-    {
-        if (self::$_instance === null) {
-            self::$_instance = new self();
-        }
-        return self::$_instance;
-    }
-
-    /**
-     * logs a variable to the console
-     *
-     * @param mixed $data,... unlimited OPTIONAL number of additional logs [...]
      * @return void
      */
-    public static function log()
+    public function log($level, $message, array $context = [])
     {
-        $args = func_get_args();
-        return self::_log('', $args);
+        $this->entries[] = new LogEntry($level, $message, $context);
     }
 
     /**
-     * logs a warning to the console
+     * Allows you to override the internal 240 KB header size limit.
      *
-     * @param mixed $data,... unlimited OPTIONAL number of additional logs [...]
-     * @return void
+     * (Chrome has a 250 KB limit for the total size of all headers.)
+     *
+     * @see https://cs.chromium.org/chromium/src/net/http/http_stream_parser.h?q=ERR_RESPONSE_HEADERS_TOO_BIG&sq=package:chromium&dr=C&l=159
+     *
+     * @param int $limit header size limit (in KB)
      */
-    public static function warn()
+    public function setLimit($limit)
     {
-        $args = func_get_args();
-        return self::_log(self::WARN, $args);
+        $this->limit = $limit * 1024;
     }
 
     /**
-     * logs an error to the console
+     * Adds headers for recorded log-entries in the ChromeLogger format.
      *
-     * @param mixed $data,... unlimited OPTIONAL number of additional logs [...]
-     * @return void
+     * (You should call this at the end of the request/response cycle in your PSR-7 project, e.g.
+     * immediately before emitting the Response.)
+     *
+     * @param ResponseInterface $response
+     *
+     * @return ResponseInterface
      */
-    public static function error()
+    public function writeToResponse(ResponseInterface $response)
     {
-        $args = func_get_args();
-        return self::_log(self::ERROR, $args);
+        $json = json_encode(
+            $this->encodeEntries($this->entries),
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+        );
+
+        $this->entries = [];
+
+        return $response->withHeader(self::HEADER_NAME, base64_encode($json));
     }
 
     /**
-     * sends a group log
+     * Internally encodes recorded log-entries in the ChromeLogger-compatible data-format.
      *
-     * @param string value
-     */
-    public static function group()
-    {
-        $args = func_get_args();
-        return self::_log(self::GROUP, $args);
-    }
-
-    /**
-     * sends an info log
+     * @param LogEntry[] $entries
      *
-     * @param mixed $data,... unlimited OPTIONAL number of additional logs [...]
-     * @return void
-     */
-    public static function info()
-    {
-        $args = func_get_args();
-        return self::_log(self::INFO, $args);
-    }
-
-    /**
-     * sends a collapsed group log
-     *
-     * @param string value
-     */
-    public static function groupCollapsed()
-    {
-        $args = func_get_args();
-        return self::_log(self::GROUP_COLLAPSED, $args);
-    }
-
-    /**
-     * ends a group log
-     *
-     * @param string value
-     */
-    public static function groupEnd()
-    {
-        $args = func_get_args();
-        return self::_log(self::GROUP_END, $args);
-    }
-
-    /**
-     * sends a table log
-     *
-     * @param string value
-     */
-    public static function table()
-    {
-        $args = func_get_args();
-        return self::_log(self::TABLE, $args);
-    }
-
-    /**
-     * internal logging call
-     *
-     * @param string $type
-     * @return void
-     */
-    protected static function _log($type, array $args)
-    {
-        // nothing passed in, don't do anything
-        if (count($args) == 0 && $type != self::GROUP_END) {
-            return;
-        }
-
-        $logger = self::getInstance();
-
-        $logger->_processed = array();
-
-        $logs = array();
-        foreach ($args as $arg) {
-            $logs[] = $logger->_convert($arg);
-        }
-
-        $backtrace = debug_backtrace(false);
-        $level = $logger->getSetting(self::BACKTRACE_LEVEL);
-
-        $backtrace_message = 'unknown';
-        if (isset($backtrace[$level]['file']) && isset($backtrace[$level]['line'])) {
-            $backtrace_message = $backtrace[$level]['file'] . ' : ' . $backtrace[$level]['line'];
-        }
-
-        $logger->_addRow($logs, $backtrace_message, $type);
-    }
-
-    /**
-     * converts an object to a better format for logging
-     *
-     * @param Object
      * @return array
      */
-    protected function _convert($object)
+    protected function encodeEntries($entries)
     {
-        // if this isn't an object then just return it
-        if (!is_object($object)) {
-            return $object;
-        }
+        // NOTE: "log" level type is deliberately omitted from the following map, since
+        //       it's the default entry-type in ChromeLogger, and can be omitted.
 
-        //Mark this object as processed so we don't convert it twice and it
-        //Also avoid recursion when objects refer to each other
-        $this->_processed[] = $object;
+        static $LEVELS = [
+            LogLevel::DEBUG     => self::LOG,
+            LogLevel::INFO      => self::INFO,
+            LogLevel::NOTICE    => self::INFO,
+            LogLevel::WARNING   => self::WARN,
+            LogLevel::ERROR     => self::ERROR,
+            LogLevel::CRITICAL  => self::ERROR,
+            LogLevel::ALERT     => self::ERROR,
+            LogLevel::EMERGENCY => self::ERROR,
+        ];
 
-        $object_as_array = array();
+        $rows = [];
 
-        // first add the class name
-        $object_as_array['___class_name'] = get_class($object);
+        foreach ($entries as $entry) {
+            $row = [];
 
-        // loop through object vars
-        $object_vars = get_object_vars($object);
-        foreach ($object_vars as $key => $value) {
+            $data = [
+                str_replace("%", "%%", $entry->message),
+            ];
 
-            // same instance as parent object
-            if ($value === $object || in_array($value, $this->_processed, true)) {
-                $value = 'recursion - parent object [' . get_class($value) . ']';
+            if (count($entry->context)) {
+                $context = $this->sanitize($entry->context);
+
+                $data = array_merge($data, $context);
             }
-            $object_as_array[$key] = $this->_convert($value);
+
+            $row[] = $data;
+
+            $row[] = isset($LEVELS[$entry->level])
+                ? $LEVELS[$entry->level]
+                : self::LOG;
+
+            if (isset($entry->context["exception"])) {
+                // NOTE: per PSR-3, this reserved key could be anything, but if it is an Exception, we
+                //       can use that Exception to obtain a stack-trace for output in ChromeLogger.
+
+                $exception = $entry->context["exception"];
+
+                if ($exception instanceof Exception || $exception instanceof Error) {
+                    $row[] = $exception->getTraceAsString();
+                }
+            }
+
+            // Optimization: ChromeLogger defaults to "log" if no entry-type is specified.
+
+            if ($row[1] === self::LOG) {
+                if (count($row) === 2) {
+                    unset($row[1]);
+                } else {
+                    $row[1] = "";
+                }
+            }
+
+            $rows[] = $row;
         }
 
-        $reflection = new ReflectionClass($object);
+        return [
+            "version" => self::VERSION,
+            "columns" => [self::COLUMN_LOG, self::COLUMN_TYPE, self::COLUMN_BACKTRACE],
+            "rows"    => $rows,
+        ];
+    }
 
-        // loop through the properties and add those
+    /**
+     * Internally sanitize context values, producing a JSON-compatible data-structure.
+     *
+     * @param mixed  $data      any PHP object, array or value
+     * @param true[] $processed map where SPL object-hash => TRUE (eliminates duplicate objects from data-structures)
+     *
+     * @return array sanitized context
+     */
+    protected function sanitize($data, &$processed = [])
+    {
+        if (is_array($data)) {
+            /**
+             * @var array $data
+             */
+
+            foreach ($data as $name => $value) {
+                $data[$name] = $this->sanitize($value, $processed);
+            }
+
+            return $data;
+        }
+
+        if (is_object($data)) {
+            /**
+             * @var object $data
+             */
+
+            $class_name = get_class($data);
+
+            $hash = spl_object_hash($data);
+
+            if (isset($processed[$hash])) {
+                // NOTE: duplicate objects (circular references) are omitted to prevent recursion.
+
+                return [self::CLASS_NAME => $class_name];
+            }
+
+            $processed[$hash] = true;
+
+            if ($data instanceof JsonSerializable) {
+                // NOTE: this doesn't serialize to JSON, it only marshalls to a JSON-compatible data-structure
+
+                $data = $this->sanitize($data->jsonSerialize(), $processed);
+            } elseif ($data instanceof DateTimeInterface) {
+                $data = $this->extractDateTimeProperties($data);
+            } elseif ($data instanceof Exception || $data instanceof Error) {
+                $data = $this->extractExceptionProperties($data);
+            } else {
+                $data = $this->sanitize($this->extractObjectProperties($data), $processed);
+            }
+
+            $data[self::CLASS_NAME] = $class_name;
+
+            return $data;
+        }
+
+        if (is_scalar($data)) {
+            return $data; // bool, int, float
+        }
+
+        return null; // omit any other unsupported types (e.g. resource handles)
+    }
+
+    /**
+     * @param DateTimeInterface $datetime
+     *
+     * @return array
+     */
+    protected function extractDateTimeProperties(DateTimeInterface $datetime)
+    {
+        $utc = date_create_from_format("U", $datetime->format("U"), timezone_open("UTC"));
+
+        return [
+            "datetime" => $utc->format(self::DATETIME_FORMAT),
+            "timezone" => $datetime->getTimezone()->getName(),
+        ];
+    }
+
+    /**
+     * @param object $object
+     *
+     * @return array
+     */
+    protected function extractObjectProperties($object)
+    {
+        $properties = [];
+
+        $reflection = new ReflectionClass(get_class($object));
+
+        // obtain public, protected and private properties of the class itself:
+
         foreach ($reflection->getProperties() as $property) {
-
-            // if one of these properties was already added above then ignore it
-            if (array_key_exists($property->getName(), $object_vars)) {
-                continue;
+            if ($property->isStatic()) {
+                continue; // omit static properties
             }
-            $type = $this->_getPropertyKey($property);
 
-            if ($this->_php_version >= 5.3) {
+            $property->setAccessible(true);
+
+            $properties["\${$property->name}"] = $property->getValue($object);
+        }
+
+        // obtain any inherited private properties from parent classes:
+
+        while ($reflection = $reflection->getParentClass()) {
+            foreach ($reflection->getProperties(ReflectionProperty::IS_PRIVATE) as $property) {
                 $property->setAccessible(true);
+
+                $properties["{$reflection->name}::\${$property->name}"] = $property->getValue($object);
             }
-
-            try {
-                $value = $property->getValue($object);
-            } catch (ReflectionException $e) {
-                $value = 'only PHP 5.3 can access private/protected properties';
-            }
-
-            // same instance as parent object
-            if ($value === $object || in_array($value, $this->_processed, true)) {
-                $value = 'recursion - parent object [' . get_class($value) . ']';
-            }
-
-            $object_as_array[$type] = $this->_convert($value);
         }
-        return $object_as_array;
+
+        return $properties;
     }
 
     /**
-     * takes a reflection property and returns a nicely formatted key of the property name
+     * @param Throwable $exception
      *
-     * @param ReflectionProperty
-     * @return string
+     * @return array
      */
-    protected function _getPropertyKey(ReflectionProperty $property)
+    protected function extractExceptionProperties($exception)
     {
-        $static = $property->isStatic() ? ' static' : '';
-        if ($property->isPublic()) {
-            return 'public' . $static . ' ' . $property->getName();
-        }
+        $previous = $exception->getPrevious();
 
-        if ($property->isProtected()) {
-            return 'protected' . $static . ' ' . $property->getName();
-        }
-
-        if ($property->isPrivate()) {
-            return 'private' . $static . ' ' . $property->getName();
-        }
-    }
-
-    /**
-     * adds a value to the data array
-     *
-     * @var mixed
-     * @return void
-     */
-    protected function _addRow(array $logs, $backtrace, $type)
-    {
-        // if this is logged on the same line for example in a loop, set it to null to save space
-        if (in_array($backtrace, $this->_backtraces)) {
-            $backtrace = null;
-        }
-
-        // for group, groupEnd, and groupCollapsed
-        // take out the backtrace since it is not useful
-        if ($type == self::GROUP || $type == self::GROUP_END || $type == self::GROUP_COLLAPSED) {
-            $backtrace = null;
-        }
-
-        if ($backtrace !== null) {
-            $this->_backtraces[] = $backtrace;
-        }
-
-        $row = array($logs, $backtrace, $type);
-
-        $this->_json['rows'][] = $row;
-        $this->_writeHeader($this->_json);
-    }
-
-    protected function _writeHeader($data)
-    {
-        header(self::HEADER_NAME . ': ' . $this->_encode($data));
-    }
-
-    /**
-     * encodes the data to be sent along with the request
-     *
-     * @param array $data
-     * @return string
-     */
-    protected function _encode($data)
-    {
-        return base64_encode(utf8_encode(json_encode($data)));
-    }
-
-    /**
-     * adds a setting
-     *
-     * @param string key
-     * @param mixed value
-     * @return void
-     */
-    public function addSetting($key, $value)
-    {
-        $this->_settings[$key] = $value;
-    }
-
-    /**
-     * add ability to set multiple settings in one call
-     *
-     * @param array $settings
-     * @return void
-     */
-    public function addSettings(array $settings)
-    {
-        foreach ($settings as $key => $value) {
-            $this->addSetting($key, $value);
-        }
-    }
-
-    /**
-     * gets a setting
-     *
-     * @param string key
-     * @return mixed
-     */
-    public function getSetting($key)
-    {
-        if (!isset($this->_settings[$key])) {
-            return null;
-        }
-        return $this->_settings[$key];
+        return [
+            "\$message"  => $exception->getMessage(),
+            "\$file"     => $exception->getFile(),
+            "\$code"     => $exception->getCode(),
+            "\$line"     => $exception->getLine(),
+            "\$previous" => $previous ? $this->extractExceptionProperties($previous) : null,
+        ];
     }
 }

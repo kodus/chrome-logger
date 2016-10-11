@@ -2,7 +2,7 @@
     "name": "kodus/chrome-logger",
     "type": "library",
     "description": "Alternative to the original ChromeLogger for PHP, with support for PSR-7",
-    "license": "Apache-2.0",
+    "license": "MIT",
     "authors": [
         {
             "name": "Rasmus Schultz",
@@ -11,10 +11,13 @@
         }
     ],
     "require": {
-        "php": ">=5.3"
+        "php": ">=5.6",
+        "psr/log": "^1",
+        "psr/http-message": "^1"
     },
     "require-dev": {
-        "codeception/codeception": "^2"
+        "codeception/codeception": "^2",
+        "mockery/mockery": "^0.9"
     },
     "autoload": {
         "psr-4": {
