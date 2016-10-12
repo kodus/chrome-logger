@@ -73,10 +73,14 @@ class ChromeLoggerCest
     {
         $logger = new ChromeLogger();
 
+        $resource = fopen(__FILE__, "r");
+
         $logger->debug(
             "DE%BUG",
-            [123, "hello", true, false, null, fopen(__FILE__, "r"), [1, 2, 3], ["a" => 1, "b" => 2]]
+            [123, "hello", true, false, null, $resource, [1, 2, 3], ["a" => 1, "b" => 2]]
         );
+
+        $resource_id = array_pop(explode('#', (string)$resource));
 
         $logger->info("INFO", [new Baz()]);
 
@@ -101,17 +105,25 @@ class ChromeLoggerCest
             '___class_name' => Baz::class,
         ];
 
+        $resource_info = [
+            '___class_name' => "resource",
+            "type" => "stream",
+            "id" => $resource_id
+        ];
+
         $I->assertSame(
             [
                 "version" => ChromeLogger::VERSION,
                 "columns" => ["log", "type", "backtrace"],
                 "rows"    => [
-                    [["DE%%BUG", 123, "hello", true, false, null, /* resource: */ null, [1, 2, 3], ["a" => 1, "b" => 2]]],
+                    [["DE%%BUG", 123, "hello", true, false, null, $resource_info, [1, 2, 3], ["a" => 1, "b" => 2]]],
                     [["INFO", $object_graph], "info"],
                 ],
             ],
             $this->extractResult($logger)
         );
+
+        fclose($resource);
     }
 
     public function obtainStackTrace(UnitTester $I)

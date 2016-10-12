@@ -35,6 +35,8 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     const ERROR = 'error';
     const INFO  = 'info';
 
+    // TODO add support for groups and tables?
+
     const GROUP           = 'group';
     const GROUP_END       = 'groupEnd';
     const GROUP_COLLAPSED = 'groupCollapsed';
@@ -46,12 +48,12 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     /**
      * @var int header size limit (in bytes, defaults to 240KB)
      */
-    private $limit = 245760;
+    protected $limit = 245760;
 
     /**
      * @var LogEntry[]
      */
-    private $entries = [];
+    protected $entries = [];
 
     /**
      * Logs with an arbitrary level.
@@ -177,12 +179,12 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     }
 
     /**
-     * Internally sanitize context values, producing a JSON-compatible data-structure.
+     * Internally marshall and sanitize context values, producing a JSON-compatible data-structure.
      *
      * @param mixed  $data      any PHP object, array or value
      * @param true[] $processed map where SPL object-hash => TRUE (eliminates duplicate objects from data-structures)
      *
-     * @return array sanitized context
+     * @return mixed marshalled and sanitized context
      */
     protected function sanitize($data, &$processed = [])
     {
@@ -234,6 +236,14 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
 
         if (is_scalar($data)) {
             return $data; // bool, int, float
+        }
+
+        if (is_resource($data)) {
+            return [
+                self::CLASS_NAME => "resource",
+                "type" => get_resource_type($data),
+                "id" => array_pop(explode('#', (string)$data))
+            ];
         }
 
         return null; // omit any other unsupported types (e.g. resource handles)
