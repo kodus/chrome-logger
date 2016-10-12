@@ -138,11 +138,11 @@ class ChromeLoggerCest
         $I->assertNotNull($data["rows"][0][0]["exception"]);
         $I->assertNotNull($data["rows"][0][0]["hello"]);
         $I->assertEquals("", $data["rows"][0][1]);
-        $I->assertEquals($e->getTraceAsString(), $data["rows"][0][2]);
+        $I->assertEquals($e->__toString(), $data["rows"][0][2]);
 
         $I->assertEquals("INFO", $data["rows"][1][0][0]);
         $I->assertEquals("info", $data["rows"][1][1]);
-        $I->assertEquals($e->getTraceAsString(), $data["rows"][1][2]);
+        $I->assertEquals($e->__toString(), $data["rows"][1][2]);
     }
 
     /**

@@ -94,7 +94,7 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     public function writeToResponse(ResponseInterface $response)
     {
         $json = json_encode(
-            $this->encodeEntries($this->entries),
+            $this->encodeEntries(),
             JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         );
 
@@ -106,11 +106,9 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     /**
      * Internally encodes recorded log-entries in the ChromeLogger-compatible data-format.
      *
-     * @param LogEntry[] $entries
-     *
      * @return array
      */
-    protected function encodeEntries($entries)
+    protected function encodeEntries()
     {
         // NOTE: "log" level type is deliberately omitted from the following map, since
         //       it's the default entry-type in ChromeLogger, and can be omitted.
@@ -128,7 +126,7 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
 
         $rows = [];
 
-        foreach ($entries as $entry) {
+        foreach ($this->entries as $entry) {
             $row = [];
 
             $data = [
@@ -154,7 +152,7 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
                 $exception = $entry->context["exception"];
 
                 if ($exception instanceof Exception || $exception instanceof Error) {
-                    $row[] = $exception->getTraceAsString();
+                    $row[] = $exception->__toString();
                 }
             }
 
