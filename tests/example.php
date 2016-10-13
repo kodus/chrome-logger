@@ -54,12 +54,24 @@ $logger = new ChromeLogger();
 
 $resource = fopen(__FILE__, "r");
 
+$logger->error("oops! looks like an exception, heh.", ["exception" => $e]);
+
 $logger->debug(
-    "DE%BUG",
+    "Example with random values",
     [123, "hello", true, false, null, $resource, [1, 2, 3], ["a" => 1, "b" => 2]]
 );
 
-$logger->info("INFO", [new Baz()]);
+$logger->info("Example with labeled context", ["my object" => new Baz(), "my number" => 123]);
+
+$logger->info(
+    "INFO",
+    [
+        "TABLE: SQL Queries" => [
+            ["time" => "10 msec", "sql" => "SELECT * FROM foo"],
+            ["time" => "20 msec", "sql" => "SELECT * FROM baz"],
+        ]
+    ]
+);
 
 $logger->emitHeader();
 

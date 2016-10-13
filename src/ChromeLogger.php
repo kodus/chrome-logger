@@ -29,6 +29,7 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     const COLUMN_TYPE      = "type";
 
     const CLASS_NAME  = "type";
+    const TABLES      = "tables";
     const HEADER_NAME = "X-ChromeLogger-Data";
 
     const LOG   = "log";
@@ -36,17 +37,14 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     const ERROR = "error";
     const INFO  = "info";
 
-    // TODO add support for groups and tables?
-
     const GROUP           = "group";
     const GROUP_END       = "groupEnd";
     const GROUP_COLLAPSED = "groupCollapsed";
-
-    const TABLE = "table";
+    const TABLE           = "table";
 
     const DATETIME_FORMAT = "Y-m-d\\TH:i:s\\Z"; // ISO-8601 UTC date/time format
 
-    const LIMIT_WARNING   = "Beginning of log entries omitted - total header size over Chrome's internal limit!";
+    const LIMIT_WARNING = "Beginning of log entries omitted - total header size over Chrome's internal limit!";
 
     /**
      * @var int header size limit (in bytes, defaults to 240KB)
@@ -143,9 +141,7 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
         $value = $this->encodeData($data);
 
         if (strlen($value) > $this->limit) {
-            $data["rows"][] = $this->createEntryData(
-                new LogEntry(LogLevel::WARNING, self::LIMIT_WARNING)
-            );
+            $data["rows"][] = $this->createEntryData(new LogEntry(LogLevel::WARNING, self::LIMIT_WARNING))[0];
 
             // NOTE: the strategy here is to calculate an estimated overhead, based on the number
             //       of rows - because the size of each row may vary, this isn't necessarily accurate,
@@ -158,13 +154,11 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
 
                 $max_rows = (int) floor(($this->limit * 0.95) / $row_size); // 5% under the likely max. number of rows
 
-                $excess = max(1, $num_rows - $max_rows);
+                $excess = max(1, $num_rows - $max_rows); // remove at least 1 row
 
-                // Remove excess rows and try encoding again:
+                $data["rows"] = array_slice($data["rows"], $excess); // remove excess rows
 
-                $data["rows"] = array_slice($data["rows"], $excess);
-
-                $value = $this->encodeData($data);
+                $value = $this->encodeData($data); // encode again with fewer rows
             }
         }
 
@@ -202,7 +196,9 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
         $rows = [];
 
         foreach ($entries as $entry) {
-            $rows[] = $this->createEntryData($entry);
+            foreach ($this->createEntryData($entry) as $row) {
+                $rows[] = $row;
+            }
         }
 
         return [
@@ -217,7 +213,7 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
      *
      * @param LogEntry $entry
      *
-     * @return array log entry in ChromeLogger row-format
+     * @return array log-entries in ChromeLogger row-format
      */
     protected function createEntryData(LogEntry $entry)
     {
@@ -235,16 +231,49 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
             LogLevel::EMERGENCY => self::ERROR,
         ];
 
-        $row = [];
+        $rows = []; // all rows returned by this function
 
-        $data = [
-            str_replace("%", "%%", $entry->message),
-        ];
+        $row = []; // the first row returned by this function
 
-        if (count($entry->context)) {
-            $context = $this->sanitize($entry->context);
+        $message = $entry->message;
+        $context = $entry->context;
 
-            $data = array_merge($data, $context);
+        if (isset($context["exception"])) {
+            // NOTE: per PSR-3, this reserved key could be anything, but if it is an Exception, we
+            //       can use that Exception to obtain a stack-trace for output in ChromeLogger.
+
+            $exception = $context["exception"];
+
+            if ($exception instanceof Exception || $exception instanceof Error) {
+                $stack_trace = explode("\n", $exception->__toString());
+                $title = array_shift($stack_trace);
+
+                $rows[] = [[$title], self::GROUP_COLLAPSED];
+                $rows[] = [[implode("\n", $stack_trace)], self::INFO];
+                $rows[] = [[], self::GROUP_END];
+            }
+
+            unset($context["exception"]);
+        }
+
+        $data = [str_replace("%", "%%", $message)];
+
+        foreach ($context as $key => $value) {
+            if (is_array($context[$key]) && preg_match("/^table:\\s*(.+)/ui", $key, $matches) === 1) {
+                $title = $matches[1];
+
+                $rows[] = [[$title], self::GROUP_COLLAPSED];
+                $rows[] = [[$context[$key]], self::TABLE];
+                $rows[] = [[], self::GROUP_END];
+
+                unset($context[$key]);
+            } else {
+                if (!is_int($key)) {
+                    $data[] = "{$key}:";
+                }
+
+                $data[] = $this->sanitize($value);
+            }
         }
 
         $row[] = $data;
@@ -252,17 +281,6 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
         $row[] = isset($LEVELS[$entry->level])
             ? $LEVELS[$entry->level]
             : self::LOG;
-
-        if (isset($entry->context["exception"])) {
-            // NOTE: per PSR-3, this reserved key could be anything, but if it is an Exception, we
-            //       can use that Exception to obtain a stack-trace for output in ChromeLogger.
-
-            $exception = $entry->context["exception"];
-
-            if ($exception instanceof Exception || $exception instanceof Error) {
-                $row[] = $exception->__toString();
-            }
-        }
 
         // Optimization: ChromeLogger defaults to "log" if no entry-type is specified.
 
@@ -274,7 +292,9 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
             }
         }
 
-        return $row;
+        array_unshift($rows, $row); // append the first row
+
+        return $rows;
     }
 
     /**

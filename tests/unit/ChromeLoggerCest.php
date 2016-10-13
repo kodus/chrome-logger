@@ -77,7 +77,7 @@ class ChromeLoggerCest
 
         $logger->debug(
             "DE%BUG",
-            [123, "hello", true, false, null, $resource, [1, 2, 3], ["a" => 1, "b" => 2]]
+            [123, "label" => "hello", true, false, null, $resource, [1, 2, 3], ["a" => 1, "b" => 2]]
         );
 
         $resource_id = explode('#', (string) $resource);
@@ -115,7 +115,7 @@ class ChromeLoggerCest
                 "version" => ChromeLogger::VERSION,
                 "columns" => ["log", "type", "backtrace"],
                 "rows"    => [
-                    [["DE%%BUG", 123, "hello", true, false, null, $resource_info, [1, 2, 3], ["a" => 1, "b" => 2]]],
+                    [["DE%%BUG", 123, "label:", "hello", true, false, null, $resource_info, [1, 2, 3], ["a" => 1, "b" => 2]]],
                     [["INFO", $object_graph], "info"],
                 ],
             ],
@@ -139,21 +139,39 @@ class ChromeLoggerCest
 
         $logger->debug("DEBUG", ["exception" => $e, "hello" => "world"]);
 
-        $logger->info("INFO", [1, 2, 3, "exception" => $e]);
+        $data = $this->extractResult($logger);
+
+        $exception_trace = explode("\n", $e->__toString());
+        $exception_title = array_shift($exception_trace);
+        $exception_trace = implode("\n", $exception_trace);
+
+        $I->assertEquals([
+            [["DEBUG", "hello:", "world"]],
+            [[$exception_title], "groupCollapsed"],
+            [[$exception_trace], "info"],
+            [[], "groupEnd"]
+        ], $data["rows"]);
+    }
+
+    public function renderTables(UnitTester $I)
+    {
+        $logger = new ChromeLogger();
+
+        $table_rows = [
+            ["foo" => "bar", "bar" => "bat"],
+            ["foo" => "wup", "bar" => "baz"],
+        ];
+
+        $logger->debug("DEBUG", ["table: Some Data" => $table_rows]);
 
         $data = $this->extractResult($logger);
 
-        $I->assertEquals(2, count($data["rows"]));
-
-        $I->assertEquals("DEBUG", $data["rows"][0][0][0]);
-        $I->assertNotNull($data["rows"][0][0]["exception"]);
-        $I->assertNotNull($data["rows"][0][0]["hello"]);
-        $I->assertEquals("", $data["rows"][0][1]);
-        $I->assertEquals($e->__toString(), $data["rows"][0][2]);
-
-        $I->assertEquals("INFO", $data["rows"][1][0][0]);
-        $I->assertEquals("info", $data["rows"][1][1]);
-        $I->assertEquals($e->__toString(), $data["rows"][1][2]);
+        $I->assertEquals([
+            [["DEBUG"]],
+            [["Some Data"], "groupCollapsed"],
+            [[$table_rows], "table"],
+            [[], "groupEnd"]
+        ], $data["rows"]);
     }
 
     public function truncateExcessiveLogData(UnitTester $I)
