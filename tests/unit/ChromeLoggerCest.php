@@ -156,6 +156,23 @@ class ChromeLoggerCest
         $I->assertEquals($e->__toString(), $data["rows"][1][2]);
     }
 
+    public function truncateExcessiveLogData(UnitTester $I)
+    {
+        $logger = new ChromeLogger();
+
+        $logger->setLimit(10*1024);
+
+        for ($n=0; $n<200; $n++) {
+            $message = str_repeat("0123456789", rand(1,20)); // between 10 and 200 bytes
+
+            $logger->debug($message);
+        }
+
+        $data = $this->extractResult($logger); // NOTE: assertion about header-size is built into this method
+
+        $I->assertEquals(ChromeLogger::LIMIT_WARNING, end($data["rows"])[0][0]);
+    }
+
     /**
      * Extract data from the data-header created by a ChromeLogger instance.
      *
@@ -182,6 +199,7 @@ class ChromeLoggerCest
         assert(count($calls) === 1);
         assert(count($calls[0]) === 2);
         assert($calls[0][0] === ChromeLogger::HEADER_NAME);
+        assert(strlen($calls[0][1]) <= $logger->getLimit());
 
         return json_decode(base64_decode($calls[0][1]), true);
     }

@@ -40,6 +40,10 @@ try {
 Any PHP values injected via the context array will be serialized for client-side inspection - including complex
 object graphs and explicit serialization of problematic types like `Exception` and `DateTime`.
 
+Note that [Chrome has a 250KB header size limit](https://cs.chromium.org/chromium/src/net/http/http_stream_parser.h?q=ERR_RESPONSE_HEADERS_TOO_BIG&sq=package:chromium&dr=C&l=159),
+which we have to respect - due to this fact, the beginning of the log may get truncated, if the header-size is above
+a set limit, which by default is 240KB. You can change this limit using the `ChromeLogger::setLimit()` method.
+
 
 ## Limitations
 

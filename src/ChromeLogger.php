@@ -46,6 +46,8 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
 
     const DATETIME_FORMAT = "Y-m-d\\TH:i:s\\Z"; // ISO-8601 UTC date/time format
 
+    const LIMIT_WARNING   = "Beginning of log entries omitted - total header size over Chrome's internal limit!";
+
     /**
      * @var int header size limit (in bytes, defaults to 240KB)
      */
@@ -77,11 +79,19 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
      *
      * @see https://cs.chromium.org/chromium/src/net/http/http_stream_parser.h?q=ERR_RESPONSE_HEADERS_TOO_BIG&sq=package:chromium&dr=C&l=159
      *
-     * @param int $limit header size limit (in KB)
+     * @param int $limit header size limit (in bytes)
      */
     public function setLimit($limit)
     {
-        $this->limit = $limit * 1024;
+        $this->limit = $limit;
+    }
+
+    /**
+     * @return int header size limit (in bytes)
+     */
+    public function getLimit()
+    {
+        return $this->limit;
     }
 
     /**
@@ -128,8 +138,50 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
      */
     protected function getHeaderValue()
     {
+        $data = $this->createData($this->entries);
+
+        $value = $this->encodeData($data);
+
+        if (strlen($value) > $this->limit) {
+            $data["rows"][] = $this->createEntryData(
+                new LogEntry(LogLevel::WARNING, self::LIMIT_WARNING)
+            );
+
+            // NOTE: the strategy here is to calculate an estimated overhead, based on the number
+            //       of rows - because the size of each row may vary, this isn't necessarily accurate,
+            //       so we may need repeat this more than once.
+
+            while (strlen($value) > $this->limit) {
+                $num_rows = count($data["rows"]); // current number of rows
+
+                $row_size = strlen($value) / $num_rows; // average row-size
+
+                $max_rows = (int) floor(($this->limit * 0.95) / $row_size); // 5% under the likely max. number of rows
+
+                $excess = max(1, $num_rows - $max_rows);
+
+                // Remove excess rows and try encoding again:
+
+                $data["rows"] = array_slice($data["rows"], $excess);
+
+                $value = $this->encodeData($data);
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Encodes the ChromeLogger-compatible data-structure in JSON/base64-format
+     *
+     * @param array $data header data
+     *
+     * @return string
+     */
+    protected function encodeData(array $data)
+    {
         $json = json_encode(
-            $this->encodeEntries(),
+            $data,
             JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         );
 
@@ -139,11 +191,35 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     }
 
     /**
-     * Internally encodes recorded log-entries in the ChromeLogger-compatible data-format.
+     * Internally builds the ChromeLogger-compatible data-structure from internal log-entries.
+     *
+     * @param LogEntry[] $entries
      *
      * @return array
      */
-    protected function encodeEntries()
+    protected function createData(array $entries)
+    {
+        $rows = [];
+
+        foreach ($entries as $entry) {
+            $rows[] = $this->createEntryData($entry);
+        }
+
+        return [
+            "version" => self::VERSION,
+            "columns" => [self::COLUMN_LOG, self::COLUMN_TYPE, self::COLUMN_BACKTRACE],
+            "rows"    => $rows,
+        ];
+    }
+
+    /**
+     * Encode an individual LogEntry in ChromeLogger-compatible format
+     *
+     * @param LogEntry $entry
+     *
+     * @return array log entry in ChromeLogger row-format
+     */
+    protected function createEntryData(LogEntry $entry)
     {
         // NOTE: "log" level type is deliberately omitted from the following map, since
         //       it's the default entry-type in ChromeLogger, and can be omitted.
@@ -159,56 +235,46 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
             LogLevel::EMERGENCY => self::ERROR,
         ];
 
-        $rows = [];
+        $row = [];
 
-        foreach ($this->entries as $entry) {
-            $row = [];
+        $data = [
+            str_replace("%", "%%", $entry->message),
+        ];
 
-            $data = [
-                str_replace("%", "%%", $entry->message),
-            ];
+        if (count($entry->context)) {
+            $context = $this->sanitize($entry->context);
 
-            if (count($entry->context)) {
-                $context = $this->sanitize($entry->context);
-
-                $data = array_merge($data, $context);
-            }
-
-            $row[] = $data;
-
-            $row[] = isset($LEVELS[$entry->level])
-                ? $LEVELS[$entry->level]
-                : self::LOG;
-
-            if (isset($entry->context["exception"])) {
-                // NOTE: per PSR-3, this reserved key could be anything, but if it is an Exception, we
-                //       can use that Exception to obtain a stack-trace for output in ChromeLogger.
-
-                $exception = $entry->context["exception"];
-
-                if ($exception instanceof Exception || $exception instanceof Error) {
-                    $row[] = $exception->__toString();
-                }
-            }
-
-            // Optimization: ChromeLogger defaults to "log" if no entry-type is specified.
-
-            if ($row[1] === self::LOG) {
-                if (count($row) === 2) {
-                    unset($row[1]);
-                } else {
-                    $row[1] = "";
-                }
-            }
-
-            $rows[] = $row;
+            $data = array_merge($data, $context);
         }
 
-        return [
-            "version" => self::VERSION,
-            "columns" => [self::COLUMN_LOG, self::COLUMN_TYPE, self::COLUMN_BACKTRACE],
-            "rows"    => $rows,
-        ];
+        $row[] = $data;
+
+        $row[] = isset($LEVELS[$entry->level])
+            ? $LEVELS[$entry->level]
+            : self::LOG;
+
+        if (isset($entry->context["exception"])) {
+            // NOTE: per PSR-3, this reserved key could be anything, but if it is an Exception, we
+            //       can use that Exception to obtain a stack-trace for output in ChromeLogger.
+
+            $exception = $entry->context["exception"];
+
+            if ($exception instanceof Exception || $exception instanceof Error) {
+                $row[] = $exception->__toString();
+            }
+        }
+
+        // Optimization: ChromeLogger defaults to "log" if no entry-type is specified.
+
+        if ($row[1] === self::LOG) {
+            if (count($row) === 2) {
+                unset($row[1]);
+            } else {
+                $row[1] = "";
+            }
+        }
+
+        return $row;
     }
 
     /**
