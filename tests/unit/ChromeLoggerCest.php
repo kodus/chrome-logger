@@ -80,35 +80,34 @@ class ChromeLoggerCest
             [123, "hello", true, false, null, $resource, [1, 2, 3], ["a" => 1, "b" => 2]]
         );
 
-        $resource_id = array_pop(explode('#', (string)$resource));
+        $resource_id = explode('#', (string) $resource);
 
         $logger->info("INFO", [new Baz()]);
 
         $object_graph = [
+            'type' => Baz::class,
             '$foo' => [
+                'type' => Foo::class,
                 '$foo'          => 'FOO',
                 '$bar'          => 'BAR',
                 '$baz'          => 'BAZ',
-                '___class_name' => Foo::class,
             ],
             '$bar' => [
+                'type'       => Bar::class,
                 '$bat'                => 'BAT',
                 '$foo'                => 'FOO',
                 '$bar'                => 'BAR',
                 Foo::class . '::$baz' => 'BAZ',
-                '___class_name'       => Bar::class,
             ],
             '$baz' => [
                 // NOTE: properties omitted for this object because it's a circular reference.
-                '___class_name' => Baz::class,
+                'type' => Baz::class,
             ],
-            '___class_name' => Baz::class,
         ];
 
         $resource_info = [
-            '___class_name' => "resource",
-            "type" => "stream",
-            "id" => $resource_id
+            'type' => "resource<stream>",
+            'id' => array_pop($resource_id)
         ];
 
         $I->assertSame(

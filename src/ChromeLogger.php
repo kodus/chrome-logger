@@ -12,6 +12,7 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use ReflectionClass;
 use ReflectionProperty;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -21,27 +22,27 @@ use Throwable;
  */
 class ChromeLogger extends AbstractLogger implements LoggerInterface
 {
-    const VERSION = '4.1.0';
+    const VERSION = "4.1.0";
 
     const COLUMN_LOG       = "log";
     const COLUMN_BACKTRACE = "backtrace";
     const COLUMN_TYPE      = "type";
 
-    const CLASS_NAME  = "___class_name";
-    const HEADER_NAME = 'X-ChromeLogger-Data';
+    const CLASS_NAME  = "type";
+    const HEADER_NAME = "X-ChromeLogger-Data";
 
-    const LOG   = 'log';
-    const WARN  = 'warn';
-    const ERROR = 'error';
-    const INFO  = 'info';
+    const LOG   = "log";
+    const WARN  = "warn";
+    const ERROR = "error";
+    const INFO  = "info";
 
     // TODO add support for groups and tables?
 
-    const GROUP           = 'group';
-    const GROUP_END       = 'groupEnd';
-    const GROUP_COLLAPSED = 'groupCollapsed';
+    const GROUP           = "group";
+    const GROUP_END       = "groupEnd";
+    const GROUP_COLLAPSED = "groupCollapsed";
 
-    const TABLE = 'table';
+    const TABLE = "table";
 
     const DATETIME_FORMAT = "Y-m-d\\TH:i:s\\Z"; // ISO-8601 UTC date/time format
 
@@ -84,7 +85,7 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     }
 
     /**
-     * Adds headers for recorded log-entries in the ChromeLogger format.
+     * Adds headers for recorded log-entries in the ChromeLogger format, and clear the internal log-buffer.
      *
      * (You should call this at the end of the request/response cycle in your PSR-7 project, e.g.
      * immediately before emitting the Response.)
@@ -95,14 +96,46 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
      */
     public function writeToResponse(ResponseInterface $response)
     {
+        $value = $this->getHeaderValue();
+
+        $this->entries = [];
+
+        return $response->withHeader(self::HEADER_NAME, $value);
+    }
+
+    /**
+     * Emit the header for recorded log-entries directly using `header()`, and clear the internal buffer.
+     *
+     * (You can use this in a non-PSR-7 project, immediately before you start emitting the response body.)
+     *
+     * @throws RuntimeException if you've already started emitting the response body
+     *
+     * @return void
+     */
+    public function emitHeader()
+    {
+        if (headers_sent()) {
+            throw new RuntimeException("unable to emit ChromeLogger header: headers have already been sent");
+        }
+
+        header(self::HEADER_NAME . ": " . $this->getHeaderValue());
+
+        $this->entries = [];
+    }
+
+    /**
+     * @return string raw value for the X-ChromeLogger-Data header
+     */
+    protected function getHeaderValue()
+    {
         $json = json_encode(
             $this->encodeEntries(),
             JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         );
 
-        $this->entries = [];
+        $value = base64_encode($json);
 
-        return $response->withHeader(self::HEADER_NAME, base64_encode($json));
+        return $value;
     }
 
     /**
@@ -229,9 +262,7 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
                 $data = $this->sanitize($this->extractObjectProperties($data), $processed);
             }
 
-            $data[self::CLASS_NAME] = $class_name;
-
-            return $data;
+            return array_merge([self::CLASS_NAME => $class_name], $data);
         }
 
         if (is_scalar($data)) {
@@ -239,10 +270,11 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
         }
 
         if (is_resource($data)) {
+            $resource = explode("#", (string) $data);
+
             return [
-                self::CLASS_NAME => "resource",
-                "type" => get_resource_type($data),
-                "id" => array_pop(explode('#', (string)$data))
+                self::CLASS_NAME => "resource<" . get_resource_type($data) . ">",
+                "id" => array_pop($resource)
             ];
         }
 

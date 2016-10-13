@@ -24,6 +24,8 @@ the Response as follows:
 $response = $logger->writeToResponse($response);
 ```
 
+If you're not using PSR-7, emitting the headers old-school is also possible with `ChromeLogger::emitHeader()`.
+
 The reserved `"exception"` key in PSR-3 [context values](http://www.php-fig.org/psr/psr-3/#1-3-context) is supported -
 the following will result in a stack-trace:
 
@@ -43,6 +45,11 @@ object graphs and explicit serialization of problematic types like `Exception` a
 
 We do not currently support log-entry grouping or tables, as supported by the original ChromeLogger for PHP, as
 these concepts are not supported by PSR-3.
+
+We do not make use of the reserved `'___class_name'` key used to color-code objects in ChromeLogger, because this
+does not work for nested object graphs - instead, we consistently indicate the object type as `type` in the console
+output, which works well enough, given that object properties are visually qualified with `$` prefix in the output.
+(Improving this in the future would require changes to the ChromeLogger extension.)
 
 
 ## Why?
