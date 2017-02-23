@@ -8,6 +8,11 @@
             "name": "Rasmus Schultz",
             "email": "rasc@jfmedier.dk",
             "role": "Developer"
+        },
+        {
+            "name": "Bo Andersen",
+            "email": "boan@jfmedier.dk",
+            "role": "Developer"
         }
     ],
     "require": {
