@@ -2,6 +2,8 @@ kodus/chrome-logger
 ===================
 
 [![PHP Version](https://img.shields.io/badge/php-5.6%2B-blue.svg)](https://packagist.org/packages/kodus/chrome-logger)
+[![Build Status](https://travis-ci.org/kodus/chrome-logger.svg?branch=master)](https://travis-ci.org/kodus/chrome-logger)
+[![Code Coverage](https://scrutinizer-ci.com/g/kodus/chrome-logger/badges/coverage.png?b=master)](https://scrutinizer-ci.com/g/kodus/chrome-logger/?branch=master)
 
 [PSR-3](http://www.php-fig.org/psr/psr-3/) and [PSR-7](http://www.php-fig.org/psr/psr-7/) compliant alternative
 to the original [ChromeLogger](https://craig.is/writing/chrome-logger) for PHP by Craig Campbell. [Because](#because).
