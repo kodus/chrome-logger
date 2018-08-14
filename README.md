@@ -1,17 +1,20 @@
 kodus/chrome-logger
 ===================
 
-[![PHP Version](https://img.shields.io/badge/php-5.6%2B-blue.svg)](https://packagist.org/packages/kodus/chrome-logger)
+[![PHP Version](https://img.shields.io/badge/php-7.0%2B-blue.svg)](https://packagist.org/packages/kodus/chrome-logger)
 [![Build Status](https://travis-ci.org/kodus/chrome-logger.svg?branch=master)](https://travis-ci.org/kodus/chrome-logger)
 [![Code Coverage](https://scrutinizer-ci.com/g/kodus/chrome-logger/badges/coverage.png?b=master)](https://scrutinizer-ci.com/g/kodus/chrome-logger/?branch=master)
 
-[PSR-3](http://www.php-fig.org/psr/psr-3/) and [PSR-7](http://www.php-fig.org/psr/psr-7/) compliant alternative
-to the original [ChromeLogger](https://craig.is/writing/chrome-logger) for PHP by Craig Campbell. [Because](#because).
+Alternative to the original [ChromeLogger](https://craig.is/writing/chrome-logger) for PHP by Craig Campbell, using:
+
+ * [PSR-3](http://www.php-fig.org/psr/psr-3/) compliant interface for logging,
+ * [PSR-7](http://www.php-fig.org/psr/psr-7/) HTTP message abstraction for the models, and
+ * [PSR-15](https://www.php-fig.org/psr/psr-15/) compliant middleware for quick integration.
 
 
 ## Usage
 
-It's PSR-3, so:
+The logging interface is PSR-3 compliant, so:
 
 ```php
 $logger = new ChromeLogger();
@@ -19,12 +22,14 @@ $logger = new ChromeLogger();
 $logger->notice("awesome sauce!");
 ```
 
-Assuming you have a PSR-7 `ResponseInterface` instance, such as in a middleware stack, you can populate
+Using a PSR-7 compliant `ResponseInterface` instance, such as in a middleware stack, you can populate
 the Response as follows:
 
 ```php
 $response = $logger->writeToResponse($response);
 ```
+
+Or just add an instance of the included PSR-15 `ChromeLoggerMiddleware` to the top of your middleware stack.
 
 If you're not using PSR-7, emitting the headers old-school is also possible with `ChromeLogger::emitHeader()`.
 
