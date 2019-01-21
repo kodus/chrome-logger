@@ -5,6 +5,8 @@ namespace Kodus\Logging;
 use DateTimeInterface;
 use Error;
 use Exception;
+use function file_put_contents;
+use InvalidArgumentException;
 use JsonSerializable;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Log\AbstractLogger;
@@ -31,6 +33,7 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     const CLASS_NAME  = "type";
     const TABLES      = "tables";
     const HEADER_NAME = "X-ChromeLogger-Data";
+    const LOCATION_HEADER_NAME = "X-ServerLog-Location";
 
     const LOG   = "log";
     const WARN  = "warn";
@@ -55,6 +58,16 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
      * @var LogEntry[]
      */
     protected $entries = [];
+
+    /**
+     * @var string|null
+     */
+    private $local_path;
+
+    /**
+     * @var string|null
+     */
+    private $public_path;
 
     /**
      * Logs with an arbitrary level.
@@ -93,6 +106,32 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     }
 
     /**
+     * Enables persistence to local log-files served from your web-root.
+     *
+     * Bypasses the header-size limitation (imposed by Chrome, NGINX, etc.) by avoiding the
+     * large `X-ChromeLogger-Data` header and instead storing the log in a flat file.
+     *
+     * Requires the [ServerLog](https://github.com/mindplay-dk/server-log) Chrome extension,
+     * which replaces the ChromeLogger extension - this does NOT work with the regular
+     * ChromeLogger extension.
+     *
+     * @link https://github.com/mindplay-dk/server-log
+     *
+     * @param string $local_path  absolute local path to a dedicated log-folder in your public web-root,
+     *                            e.g. "/var/www/mysite.com/webroot/log"
+     * @param string $public_path absolute public path, e.g. "/log"
+     */
+    public function usePersistence(string $local_path, string $public_path)
+    {
+        if (! is_dir($local_path)) {
+            throw new InvalidArgumentException("local path does not exist: {$local_path}");
+        }
+
+        $this->local_path = $local_path;
+        $this->public_path = $public_path;
+    }
+
+    /**
      * Adds headers for recorded log-entries in the ChromeLogger format, and clear the internal log-buffer.
      *
      * (You should call this at the end of the request/response cycle in your PSR-7 project, e.g.
@@ -104,11 +143,15 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
      */
     public function writeToResponse(ResponseInterface $response)
     {
-        $value = $this->getHeaderValue();
+        if ($this->local_path) {
+            $response = $response->withHeader(self::LOCATION_HEADER_NAME, $this->createLogFile());
+        } else {
+            $response = $response->withHeader(self::HEADER_NAME, $this->getHeaderValue());
+        }
 
         $this->entries = [];
 
-        return $response->withHeader(self::HEADER_NAME, $value);
+        return $response;
     }
 
     /**
@@ -126,7 +169,11 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
             throw new RuntimeException("unable to emit ChromeLogger header: headers have already been sent");
         }
 
-        header(self::HEADER_NAME . ": " . $this->getHeaderValue());
+        if ($this->local_path) {
+            header(self::LOCATION_HEADER_NAME . ": " . $this->createLogFile());
+        } else {
+            header(self::HEADER_NAME . ": " . $this->getHeaderValue());
+        }
 
         $this->entries = [];
     }
@@ -163,6 +210,59 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
         }
 
         return $value;
+    }
+
+    /**
+     * @return string public path to log-file
+     */
+    protected function createLogFile(): string
+    {
+        $this->collectGarbage();
+
+        $content = json_encode(
+            $this->createData($this->entries),
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+        );
+
+        $filename = $this->createUniqueFilename();
+
+        $local_path = "{$this->local_path}/{$filename}";
+
+        if (@file_put_contents($local_path, $content) === false) {
+            throw new RuntimeException("unable to write log-file: {$local_path}");
+        }
+
+        return "{$this->public_path}/{$filename}";
+    }
+
+    /**
+     * @return string pseudo-random log filename
+     */
+    protected function createUniqueFilename(): string
+    {
+        return uniqid("log-", true) . ".json";
+    }
+
+    /**
+     * Garbage-collects log-files older than one minute.
+     */
+    protected function collectGarbage()
+    {
+        foreach (glob("{$this->local_path}/*.json") as $path) {
+            $age = $this->getTime() - filemtime($path);
+
+            if ($age > 60) {
+                @unlink($path);
+            }
+        }
+    }
+
+    /**
+     * @return int
+     */
+    protected function getTime(): int
+    {
+        return time();
     }
 
     /**
