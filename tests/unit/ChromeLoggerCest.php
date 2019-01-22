@@ -2,12 +2,16 @@
 
 namespace Kodus\Logging\Test\Unit;
 
+use Codeception\Util\FileSystem;
+use function json_decode;
 use Kodus\Logging\ChromeLogger;
 use Mockery;
 use Mockery\MockInterface;
 use Psr\Http\Message\ResponseInterface;
 use RuntimeException;
+use function str_repeat;
 use UnitTester;
+use Zend\Diactoros\Response;
 
 class Foo
 {
@@ -191,6 +195,89 @@ class ChromeLoggerCest
         $I->assertEquals(ChromeLogger::LIMIT_WARNING, end($data["rows"])[0][0]);
     }
 
+    public function persistToLocalFiles(UnitTester $I)
+    {
+        $logger = new class extends ChromeLogger
+        {
+            private $time;
+
+            public function __construct()
+            {
+                // NOTE: no call to parent::_construct() here because PHP demands horrible code.
+
+                $this->time = time();
+            }
+
+            public function skipTime(int $time)
+            {
+                $this->time += $time;
+            }
+
+            protected function getTime(): int
+            {
+                return $this->time;
+            }
+        };
+
+        $local_path = dirname(__DIR__) . "/_output/log";
+
+        FileSystem::deleteDir($local_path);
+
+        mkdir($local_path);
+
+        $public_path = "/log";
+
+        $logger->setLimit(2048); // will be ignored!
+
+        $logger->usePersistence($local_path, $public_path);
+
+        $unique_locations = [];
+
+        $generate_log = function () use ($I, $logger, $local_path, &$unique_locations) {
+            // write 20*20*10 = 4000 bytes (over the 2048 limit, which should be ignored)
+
+            $num_rows = 20;
+
+            for ($i=1; $i<= $num_rows; $i++) {
+                $logger->debug(str_repeat("0123456789", 20));
+            }
+
+            $response = new Response(fopen("php://temp", "rw+"));
+
+            $response = $logger->writeToResponse($response);
+
+            $location = $response->getHeaderLine("X-ServerLog-Location");
+
+            $unique_locations[$location] = true;
+
+            $I->assertRegExp('/^\/log\/log-.*\.json$/', $location);
+
+            $contents = file_get_contents("{$local_path}/" . basename($location));
+
+            $I->assertCount($num_rows, json_decode($contents, true)["rows"],
+                "all rows should be written to file, despite being over the header size limit");
+        };
+
+        $num_files = 2;
+
+        for ($i=1; $i<= $num_files; $i++) {
+            $generate_log();
+        }
+
+        $I->assertCount($num_files, $unique_locations,
+            "every generated log should have a unique file-name");
+
+        $I->assertCount($num_files, glob("{$local_path}/*.json"),
+            "no files should have been garbage-collected at this point");
+
+        $logger->skipTime(60 + 1); // log-files expire after 60 seconds
+
+        $generate_log();
+
+        $I->assertCount(1, glob("{$local_path}/*.json"),
+            "previous {$num_files} log-files should be garbage-collected");
+    }
+    
     /**
      * Extract data from the data-header created by a ChromeLogger instance.
      *

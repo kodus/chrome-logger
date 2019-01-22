@@ -11,6 +11,8 @@ Alternative to the original [ChromeLogger](https://craig.is/writing/chrome-logge
  * [PSR-7](http://www.php-fig.org/psr/psr-7/) HTTP message abstraction for the models, and
  * [PSR-15](https://www.php-fig.org/psr/psr-15/) compliant middleware for quick integration.
 
+✨ An alternative to the ChromeLogger extension [is also available](http://github.com/kodus/server-log)
+and is [highly recommended](#header-size-limit).
 
 ## Usage
 
@@ -21,6 +23,8 @@ $logger = new ChromeLogger();
 
 $logger->notice("awesome sauce!");
 ```
+
+Note that this will have a [header-size limit](#header-size-limit) by default.
 
 Using a PSR-7 compliant `ResponseInterface` instance, such as in a middleware stack, you can populate
 the Response as follows:
@@ -69,11 +73,26 @@ try {
 Any PHP values injected via the context array will be serialized for client-side inspection - including complex
 object graphs and explicit serialization of problematic types like `Exception` and `DateTime`.
 
+
+<a name="header-size-limit"></a>
 ### Header Size Limit
 
-Note that [Chrome has a 250KB header size limit](https://cs.chromium.org/chromium/src/net/http/http_stream_parser.h?q=ERR_RESPONSE_HEADERS_TOO_BIG&sq=package:chromium&dr=C&l=159),
-which we have to respect - due to this fact, the beginning of the log may get truncated, if the header-size is above
-a set limit, which by default is 240KB. You can change this limit using the `ChromeLogger::setLimit()` method.
+[Chrome has a 250KB header size limit](https://cs.chromium.org/chromium/src/net/http/http_stream_parser.h?q=ERR_RESPONSE_HEADERS_TOO_BIG&sq=package:chromium&dr=C&l=159)
+and many popular web-servers (including NGINX and Apache) also have a limit.
+
+By default, the beginning of the log will be truncated to keep the header size under the limit.
+
+You can change this limit using the `ChromeLogger::setLimit()` method - but a better approach is
+to enable logging to local files, which will persist in a web-accessible folder for 60 seconds:
+
+```php
+$logger->usePersistence("/var/www/mysite/webroot/logs", "/logs");
+```
+
+Note that this isn't supported by the ChromeLogger extension - you will need to install the alternative
+[Server Log Chrome extension](http://github.com/kodus/server-log) instead. (It is backwards
+compatible with the header-format of the original ChromeLogger extension, so you can use this as
+a drop-in replacement for the original extension.)
 
 
 ## Limitations
