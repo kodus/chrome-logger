@@ -11,7 +11,7 @@ Alternative to the original [ChromeLogger](https://craig.is/writing/chrome-logge
  * [PSR-7](http://www.php-fig.org/psr/psr-7/) HTTP message abstraction for the models, and
  * [PSR-15](https://www.php-fig.org/psr/psr-15/) compliant middleware for quick integration.
 
-An alternative to the ChromeLogger extension [is also available](http://github.com/mindplay-dk/server-log)
+✨ An alternative to the ChromeLogger extension [is also available](http://github.com/kodus/server-log)
 and is [highly recommended](#header-size-limit).
 
 ## Usage
@@ -90,7 +90,7 @@ $logger->usePersistence("/var/www/mysite/webroot/logs", "/logs");
 ```
 
 Note that this isn't supported by the ChromeLogger extension - you will need to install the alternative
-[ServerLog Chrome extension](http://github.com/mindplay-dk/server-log) instead. (It is backwards
+[Server Log Chrome extension](http://github.com/kodus/server-log) instead. (It is backwards
 compatible with the header-format of the original ChromeLogger extension, so you can use this as
 a drop-in replacement for the original extension.)
 
