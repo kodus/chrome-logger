@@ -143,10 +143,12 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
      */
     public function writeToResponse(ResponseInterface $response)
     {
-        if ($this->local_path) {
-            $response = $response->withHeader(self::LOCATION_HEADER_NAME, $this->createLogFile());
-        } else {
-            $response = $response->withHeader(self::HEADER_NAME, $this->getHeaderValue());
+        if (count($this->entries)) {
+            if ($this->local_path) {
+                $response = $response->withHeader(self::LOCATION_HEADER_NAME, $this->createLogFile());
+            } else {
+                $response = $response->withHeader(self::HEADER_NAME, $this->getHeaderValue());
+            }
         }
 
         $this->entries = [];
@@ -165,17 +167,19 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
      */
     public function emitHeader()
     {
-        if (headers_sent()) {
-            throw new RuntimeException("unable to emit ChromeLogger header: headers have already been sent");
-        }
+        if (count($this->entries)) {
+            if (headers_sent()) {
+                throw new RuntimeException("unable to emit ChromeLogger header: headers have already been sent");
+            }
 
-        if ($this->local_path) {
-            header(self::LOCATION_HEADER_NAME . ": " . $this->createLogFile());
-        } else {
-            header(self::HEADER_NAME . ": " . $this->getHeaderValue());
-        }
+            if ($this->local_path) {
+                header(self::LOCATION_HEADER_NAME . ": " . $this->createLogFile());
+            } else {
+                header(self::HEADER_NAME . ": " . $this->getHeaderValue());
+            }
 
-        $this->entries = [];
+            $this->entries = [];
+        }
     }
 
     /**
