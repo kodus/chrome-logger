@@ -277,7 +277,34 @@ class ChromeLoggerCest
         $I->assertCount(1, glob("{$local_path}/*.json"),
             "previous {$num_files} log-files should be garbage-collected");
     }
-    
+
+    public function allowMultipleLocationHeaders(UnitTester $I)
+    {
+        $logger = new ChromeLogger();
+
+        $local_path = dirname(__DIR__) . "/_output/log";
+
+        FileSystem::deleteDir($local_path);
+
+        mkdir($local_path);
+
+        $public_path = "/log";
+
+        $logger->usePersistence($local_path, $public_path);
+
+        $logger->info("TEST");
+
+        $response = new Response(fopen("php://temp", "rw+"));
+
+        $response = $response->withHeader("X-ServerLog-Location", "/foo");
+
+        $response = $logger->writeToResponse($response);
+
+        $headers = $response->getHeader("X-ServerLog-Location");
+
+        $I->assertCount(2, $headers, "it should append to existing headers (not overwrite)");
+    }
+
     /**
      * Extract data from the data-header created by a ChromeLogger instance.
      *

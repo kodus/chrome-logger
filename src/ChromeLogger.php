@@ -145,7 +145,7 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
     {
         if (count($this->entries)) {
             if ($this->local_path) {
-                $response = $response->withHeader(self::LOCATION_HEADER_NAME, $this->createLogFile());
+                $response = $response->withAddedHeader(self::LOCATION_HEADER_NAME, $this->createLogFile());
             } else {
                 $response = $response->withHeader(self::HEADER_NAME, $this->getHeaderValue());
             }
