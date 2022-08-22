@@ -23,10 +23,10 @@
     },
     "require-dev": {
         "codeception/codeception": "^5",
-        "mockery/mockery": "^1.5.0",
+        "codeception/module-asserts": "^3",
+        "mockery/mockery": "^1.5",
         "nyholm/psr7": "^1.5",
-        "mindplay/middleman": "^3.0.3",
-        "codeception/module-asserts": "^3.0"
+        "mindplay/middleman": "^4"
     },
     "autoload": {
         "psr-4": {
