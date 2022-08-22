@@ -3,45 +3,20 @@
 namespace Kodus\Logging\Test\Unit;
 
 use Codeception\Util\FileSystem;
-use function json_decode;
 use Kodus\Logging\ChromeLogger;
+use Kodus\Logging\Test\Fixtures\Bar;
+use Kodus\Logging\Test\Fixtures\Baz;
+use Kodus\Logging\Test\Fixtures\Foo;
 use Mockery;
 use Mockery\MockInterface;
+use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use RuntimeException;
-use function str_repeat;
 use UnitTester;
-use Zend\Diactoros\Response;
-
-class Foo
-{
-    public $foo = "FOO";
-    protected $bar = "BAR";
-    private $baz = "BAZ";
-}
-
-class Bar extends Foo
-{
-    public $bat = "BAT";
-}
-
-class Baz
-{
-    public $foo;
-    public $bar;
-    public $baz;
-
-    public function __construct()
-    {
-        $this->foo = new Foo();
-        $this->bar = new Bar();
-        $this->baz = $this;
-    }
-}
 
 class ChromeLoggerCest
 {
-    public function writeLogMessages(UnitTester $I)
+    public function writeLogMessages(UnitTester $I): void
     {
         $logger = new ChromeLogger();
 
@@ -73,7 +48,7 @@ class ChromeLoggerCest
         );
     }
 
-    public function serializeContextValues(UnitTester $I)
+    public function serializeContextValues(UnitTester $I): void
     {
         $logger = new ChromeLogger();
 
@@ -129,7 +104,7 @@ class ChromeLoggerCest
         fclose($resource);
     }
 
-    public function obtainStackTrace(UnitTester $I)
+    public function obtainStackTrace(UnitTester $I): void
     {
         try {
             $this->foo();
@@ -157,7 +132,7 @@ class ChromeLoggerCest
         ], $data["rows"]);
     }
 
-    public function renderTables(UnitTester $I)
+    public function renderTables(UnitTester $I): void
     {
         $logger = new ChromeLogger();
 
@@ -178,14 +153,14 @@ class ChromeLoggerCest
         ], $data["rows"]);
     }
 
-    public function truncateExcessiveLogData(UnitTester $I)
+    public function truncateExcessiveLogData(UnitTester $I): void
     {
         $logger = new ChromeLogger();
 
         $logger->setLimit(10*1024);
 
         for ($n=0; $n<200; $n++) {
-            $message = str_repeat("0123456789", rand(1,20)); // between 10 and 200 bytes
+            $message = str_repeat("0123456789", rand(1, 20)); // between 10 and 200 bytes
 
             $logger->debug($message);
         }
@@ -195,7 +170,7 @@ class ChromeLoggerCest
         $I->assertEquals(ChromeLogger::LIMIT_WARNING, end($data["rows"])[0][0]);
     }
 
-    public function persistToLocalFiles(UnitTester $I)
+    public function persistToLocalFiles(UnitTester $I): void
     {
         $logger = new class extends ChromeLogger
         {
@@ -242,7 +217,7 @@ class ChromeLoggerCest
                 $logger->debug(str_repeat("0123456789", 20));
             }
 
-            $response = new Response(fopen("php://temp", "rw+"));
+            $response = new Response(body: fopen("php://temp", "rw+"));
 
             $response = $logger->writeToResponse($response);
 
@@ -278,7 +253,7 @@ class ChromeLoggerCest
             "previous {$num_files} log-files should be garbage-collected");
     }
 
-    public function allowMultipleLocationHeaders(UnitTester $I)
+    public function allowMultipleLocationHeaders(UnitTester $I): void
     {
         $logger = new ChromeLogger();
 
@@ -294,7 +269,7 @@ class ChromeLoggerCest
 
         $logger->info("TEST");
 
-        $response = new Response(fopen("php://temp", "rw+"));
+        $response = new Response(body: fopen("php://temp", "rw+"));
 
         $response = $response->withHeader("X-ServerLog-Location", "/foo");
 
@@ -312,7 +287,7 @@ class ChromeLoggerCest
      *
      * @return array
      */
-    private function extractResult(ChromeLogger $logger)
+    private function extractResult(ChromeLogger $logger): array
     {
         /**
          * @var MockInterface|ResponseInterface $response
@@ -336,7 +311,8 @@ class ChromeLoggerCest
         return json_decode(base64_decode($calls[0][1]), true);
     }
 
-    private function foo() {
+    private function foo(): void
+    {
         $this->bar();
     }
 

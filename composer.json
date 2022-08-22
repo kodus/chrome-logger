@@ -22,10 +22,11 @@
         "psr/http-server-middleware": "^1"
     },
     "require-dev": {
-        "codeception/codeception": "^2",
-        "mockery/mockery": "^0.9",
-        "zendframework/zend-diactoros": "^1.8.5",
-        "mindplay/middleman": "^3.0.3"
+        "codeception/codeception": "^5",
+        "mockery/mockery": "^1.5.0",
+        "nyholm/psr7": "^1.5",
+        "mindplay/middleman": "^3.0.3",
+        "codeception/module-asserts": "^3.0"
     },
     "autoload": {
         "psr-4": {

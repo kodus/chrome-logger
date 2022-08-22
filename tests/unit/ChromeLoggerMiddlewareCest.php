@@ -4,38 +4,14 @@ namespace Kodus\Logging\Test\Unit;
 
 use Kodus\Logging\ChromeLogger;
 use Kodus\Logging\ChromeLoggerMiddleware;
+use Kodus\Logging\Test\Mocks\MockMiddleware;
 use mindplay\middleman\Dispatcher;
-use Psr\Http\Message\ResponseInterface;
-use Psr\Http\Message\ServerRequestInterface;
-use Psr\Http\Server\MiddlewareInterface;
-use Psr\Http\Server\RequestHandlerInterface;
+use Nyholm\Psr7\ServerRequest;
 use UnitTester;
-use Zend\Diactoros\Response\TextResponse;
-use Zend\Diactoros\ServerRequest;
-
-class MockMiddleware implements MiddlewareInterface
-{
-    /**
-     * @var ChromeLogger
-     */
-    private $logger;
-
-    public function __construct(ChromeLogger $logger)
-    {
-        $this->logger = $logger;
-    }
-
-    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
-    {
-        $this->logger->notice("running mock middleware");
-
-        return new TextResponse("Hello");
-    }
-}
 
 class ChromeLoggerMiddlewareCest
 {
-    public function logDuringMiddlewareDispatch(UnitTester $I)
+    public function logDuringMiddlewareDispatch(UnitTester $I): void
     {
         $logger = new ChromeLogger();
 
@@ -48,7 +24,7 @@ class ChromeLoggerMiddlewareCest
             $mock_middleware
         ]);
 
-        $response = $dispatcher->dispatch(new ServerRequest());
+        $response = $dispatcher->handle(new ServerRequest('GET', ''));
 
         $header = $response->getHeaderLine(ChromeLogger::HEADER_NAME);
 
