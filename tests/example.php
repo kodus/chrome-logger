@@ -1,12 +1,13 @@
 <?php
 
 use Kodus\Logging\ChromeLogger;
+use Kodus\Logging\Test\Fixtures\Baz;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 // ChromeLogger output example - run on a web-server and open in a browser.
 
-function foo()
+function foo(): void
 {
     bar();
 }
@@ -14,32 +15,6 @@ function foo()
 function bar()
 {
     throw new RuntimeException("ouch!"); // for stack-trace test!
-}
-
-class Foo
-{
-    public $foo = "FOO";
-    protected $bar = "BAR";
-    private $baz = "BAZ";
-}
-
-class Bar extends Foo
-{
-    public $bat = "BAT";
-}
-
-class Baz
-{
-    public $foo;
-    public $bar;
-    public $baz;
-
-    public function __construct()
-    {
-        $this->foo = new Foo();
-        $this->bar = new Bar();
-        $this->baz = $this;
-    }
 }
 
 try {

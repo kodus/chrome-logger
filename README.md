@@ -1,7 +1,7 @@
 kodus/chrome-logger
 ===================
 
-[![PHP Version](https://img.shields.io/badge/php-7.0%2B-blue.svg)](https://packagist.org/packages/kodus/chrome-logger)
+[![PHP Version](https://img.shields.io/badge/php-8.0%2B-blue.svg)](https://packagist.org/packages/kodus/chrome-logger)
 [![Build Status](https://travis-ci.org/kodus/chrome-logger.svg?branch=master)](https://travis-ci.org/kodus/chrome-logger)
 [![Code Coverage](https://scrutinizer-ci.com/g/kodus/chrome-logger/badges/coverage.png?b=master)](https://scrutinizer-ci.com/g/kodus/chrome-logger/?branch=master)
 
