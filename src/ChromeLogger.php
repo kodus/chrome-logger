@@ -78,7 +78,7 @@ class ChromeLogger extends AbstractLogger implements LoggerInterface
      *
      * @return void
      */
-    public function log($level, $message, array $context = [])
+    public function log($level, $message, array $context = []): void
     {
         $this->entries[] = new LogEntry($level, $message, $context);
     }
